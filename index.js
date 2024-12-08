@@ -8,36 +8,34 @@ const app = express();
 
 // Middleware
 app.use(compression());
-
 app.use(cors({
   methods: ["POST", "GET"],
   credentials: true
 }));
 app.use(express.static('public'));
 
-// Routes
+// Scraping Route
 app.get('/scrape', async (req, res) => {
   const username = req.query.username;
-  if (!username) return res.status(400).send('Username is required');
+  if (!username) {
+    return res.status(400).json({ error: 'Username is required' });
+  }
 
   try {
     const profileData = await getProfileData(username);
     res.json(profileData);
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Error fetching Instagram data');
+    console.error(`Error fetching data for ${username}:`, error.message);
+    res.status(500).json({ error: 'Failed to fetch Instagram data' });
   }
 });
 
-
-// Scrape Instagram profile data
+// Function to scrape Instagram profile data
 async function getProfileData(username) {
   const url = `https://www.instagram.com/${username}/`;
   try {
     const { data } = await axios.get(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0',
-      },
+      headers: { 'User-Agent': 'Mozilla/5.0' },
     });
 
     const $ = cheerio.load(data);
@@ -45,7 +43,7 @@ async function getProfileData(username) {
     // Extract profile image
     const profileImage = $('meta[property="og:image"]').attr('content');
 
-    // Extract followers count and username
+    // Extract followers count and full name
     let followers = null;
     let fullName = null;
 
@@ -61,13 +59,21 @@ async function getProfileData(username) {
       }
     });
 
-    return { profileImage, followers, fullName: fullName || username };
+    return {
+      profileImage: profileImage || null,
+      followers: followers || null,
+      fullName: fullName || username
+    };
   } catch (error) {
-    console.error(`Error scraping ${username}:`, error);
-    throw new Error('Failed to scrape data');
+    throw new Error('Error scraping profile data');
   }
 }
 
-// Start the server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+// Export the app for Vercel
+module.exports = app;
+
+// Run server locally (for testing)
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+}
